@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SIHASAN - Sistem Informasi Harga Satuan</title>
+    <!-- Tailwind CSS untuk Styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- PapaParse untuk membaca CSV dari Google Sheets -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <!-- Font Awesome untuk Ikon -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        /* Custom scrollbar untuk tabel */
+        .table-container::-webkit-scrollbar {
+            height: 8px;
+            width: 8px;
+        }
+        .table-container::-webkit-scrollbar-track {
+            background: #f1f1f1; 
+            border-radius: 4px;
+        }
+        .table-container::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 4px;
+        }
+        .table-container::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col text-gray-800">
+
+    <!-- Header: Floating, Round Corner, Campuran Biru & Kuning -->
+    <header class="fixed top-4 left-4 right-4 z-50">
+        <div class="bg-gradient-to-r from-blue-600 via-blue-500 to-yellow-400 rounded-2xl shadow-xl p-4 md:px-6 flex items-center justify-between mx-auto max-w-7xl">
+            <div class="flex items-center gap-4 lg:gap-6">
+                <!-- Logo dengan background putih dan round corner -->
+                <div class="bg-white p-2 rounded-xl shadow-md flex-shrink-0">
+                    <!-- Menggunakan endpoint thumbnail untuk merender gambar dari Google Drive (lebih stabil) -->
+                    <img src="https://drive.google.com/thumbnail?id=1Kn4io2mZuPkU5YE0nTExXxAz6LAJiz8G&sz=w300" 
+                         alt="Logo SIHASAN" 
+                         class="h-14 w-14 md:h-20 md:w-20 object-contain rounded-lg"
+                         onerror="this.src='https://placehold.co/150x150/ffffff/000000?text=Logo'">
+                </div>
+                <div>
+                    <h1 class="text-xl md:text-2xl lg:text-3xl font-bold text-white drop-shadow-md tracking-wide">
+                        SIHASAN
+                    </h1>
+                    <p class="hidden sm:block text-blue-50 text-xs md:text-sm font-medium drop-shadow-sm">
+                        Sistem Informasi Harga Satuan
+                    </p>
+                </div>
+            </div>
+            <div class="hidden md:block">
+                <a href="https://bandarlampungkota.go.id/" target="_blank" rel="noopener noreferrer" class="inline-flex items-center bg-white/20 hover:bg-white/30 text-white text-xs font-semibold px-4 py-1.5 rounded-full backdrop-blur-sm border border-white/30 transition-all cursor-pointer shadow-sm hover:shadow-md hover:-translate-y-0.5">
+                    <i class="fas fa-globe mr-2"></i> Pemkot Bandar Lampung
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="flex-grow pt-32 pb-12 px-4 w-full max-w-7xl mx-auto">
+        
+        <div class="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+            <!-- Toolbar: Show Entries & Filters -->
+            <div class="p-5 md:p-6 border-b border-gray-100 bg-gray-50 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                
+                <!-- Pilihan Jumlah Tampilan -->
+                <div class="flex items-center text-sm font-medium text-gray-700">
+                    <label for="pageSize" class="flex items-center gap-2 cursor-pointer">
+                        Tampilkan
+                        <select id="pageSize" class="border border-gray-300 rounded-lg py-1.5 px-3 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow">
+                            <option value="10">10</option>
+                            <option value="20">20</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                            <option value="all">Semuanya</option>
+                        </select>
+                        data
+                    </label>
+                </div>
+
+                <!-- Filter Dropdown & Quick Search -->
+                <div class="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
+                    <!-- Dropdown Filter bersumber dari spreadsheet -->
+                    <div class="relative w-full sm:w-48">
+                        <select id="satuanFilter" class="w-full appearance-none border border-gray-300 rounded-lg py-2 pl-3 pr-8 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm transition-shadow">
+                            <option value="">Semua Satuan</option>
+                            <!-- Pilihan akan diisi dinamis dari data -->
+                        </select>
+                        <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
+                            <i class="fas fa-chevron-down text-xs"></i>
+                        </div>
+                    </div>
+
+                    <!-- Pencarian Cepat -->
+                    <div class="relative w-full sm:w-64">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i class="fas fa-search text-gray-400"></i>
+                        </div>
+                        <input type="text" id="quickSearch" placeholder="Pencarian cepat..." 
+                               class="w-full border border-gray-300 rounded-lg py-2 pl-10 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow">
+                    </div>
+
+                    <!-- Reset Button -->
+                    <button id="btnReset" class="w-full sm:w-auto bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-4 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2">
+                        <i class="fas fa-rotate-right"></i> Reset
+                    </button>
+                </div>
+            </div>
+
+            <!-- Area Tabel -->
+            <div class="table-container overflow-x-auto w-full relative min-h-[300px]">
+                
+                <!-- Loading Overlay -->
+                <div id="loadingIndicator" class="absolute inset-0 bg-white/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center text-blue-600 transition-opacity duration-300">
+                    <i class="fas fa-circle-notch fa-spin text-4xl mb-3"></i>
+                    <p class="font-medium animate-pulse">Mengambil data dari Spreadsheet...</p>
+                </div>
+
+                <table class="w-full text-left border-collapse min-w-[800px]">
+                    <!-- Header Tabel Abu-abu, Teks Hitam Bold -->
+                    <thead class="bg-gray-200 text-black font-bold border-y-2 border-gray-300">
+                        <tr>
+                            <th class="py-3 px-4 w-16 text-center border-r border-gray-300">No.</th>
+                            <th class="py-3 px-4 border-r border-gray-300">Uraian</th>
+                            <th class="py-3 px-4 border-r border-gray-300 w-48">Merk</th>
+                            <th class="py-3 px-4 border-r border-gray-300 w-32 text-center">Satuan</th>
+                            <th class="py-3 px-4 border-r border-gray-300 w-48 text-right">Harga Satuan</th>
+                            <th class="py-3 px-4">Keterangan</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody" class="divide-y divide-gray-200 text-sm">
+                        <!-- Data row akan dirender di sini melalui JavaScript -->
+                    </tbody>
+                </table>
+                
+                <!-- Pesan Data Kosong -->
+                <div id="emptyState" class="hidden flex flex-col items-center justify-center py-12 text-gray-500">
+                    <i class="fas fa-folder-open text-4xl mb-3 text-gray-300"></i>
+                    <p class="font-medium">Tidak ada data yang ditemukan.</p>
+                </div>
+            </div>
+
+            <!-- Pagination Controls -->
+            <div class="p-5 border-t border-gray-100 bg-gray-50 flex flex-col md:flex-row items-center justify-between gap-4">
+                <div class="text-sm text-gray-600 font-medium" id="pageInfo">
+                    Menampilkan <span class="font-bold text-gray-900" id="infoStart">0</span> sampai <span class="font-bold text-gray-900" id="infoEnd">0</span> dari <span class="font-bold text-gray-900" id="infoTotal">0</span> entri
+                </div>
+                
+                <div class="flex items-center gap-1">
+                    <button id="btnPrev" class="px-3 py-1.5 border border-gray-300 rounded-md bg-white text-gray-600 hover:bg-gray-50 hover:text-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                        <i class="fas fa-chevron-left text-xs"></i>
+                    </button>
+                    <div id="pageNumbers" class="flex gap-1">
+                        <!-- Nomor halaman dirender di sini -->
+                    </div>
+                    <button id="btnNext" class="px-3 py-1.5 border border-gray-300 rounded-md bg-white text-gray-600 hover:bg-gray-50 hover:text-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                        <i class="fas fa-chevron-right text-xs"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- AI Chat FAB (Floating Action Button) -->
+    <button id="aiChatBtn" class="fixed bottom-6 right-6 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-full px-5 py-3 shadow-xl hover:shadow-2xl transition-transform transform hover:scale-105 z-40 flex items-center gap-2 font-semibold">
+        <i class="fas fa-sparkles"></i>
+        <span>Tanya AI</span>
+    </button>
+
+    <!-- AI Chat Modal -->
+    <div id="aiChatModal" class="fixed bottom-20 right-6 w-[90vw] sm:w-[400px] h-[500px] bg-white rounded-2xl shadow-2xl border border-gray-200 flex-col z-50 transition-all transform origin-bottom-right scale-0 opacity-0 flex hidden">
+        <!-- Chat Header -->
+        <div class="bg-gradient-to-r from-blue-600 to-purple-600 p-4 rounded-t-2xl text-white flex justify-between items-center shadow-md z-10">
+            <div class="flex items-center gap-2">
+                <div class="bg-white/20 p-2 rounded-lg backdrop-blur-sm">
+                    <i class="fas fa-robot text-lg"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-sm md:text-base leading-tight">Asisten AI SIHASAN</h3>
+                    <p class="text-[10px] md:text-xs text-blue-100">Didukung oleh Gemini</p>
+                </div>
+            </div>
+            <button id="closeChatBtn" class="text-white/80 hover:text-white hover:bg-white/20 p-2 rounded-full transition-colors">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <!-- Chat Messages Area -->
+        <div id="chatMessages" class="flex-1 p-4 overflow-y-auto bg-gray-50 flex flex-col gap-3">
+            <!-- Pesan Pembuka Bot -->
+            <div class="flex gap-2 items-end">
+                <div class="bg-blue-100 text-blue-900 p-3 rounded-2xl rounded-bl-none max-w-[85%] text-sm shadow-sm border border-blue-200">
+                    Halo! Saya Asisten AI SIHASAN. Anda bisa bertanya tentang data material, merk, atau harga yang ada di tabel ini. Ada yang bisa saya bantu cari?
+                </div>
+            </div>
+        </div>
+
+        <!-- Chat Input Area -->
+        <div class="p-3 border-t border-gray-200 bg-white rounded-b-2xl">
+            <div class="relative flex items-center">
+                <input type="text" id="chatInput" placeholder="Ketik pertanyaan Anda..." 
+                       class="w-full bg-gray-100 border-transparent focus:border-purple-500 focus:bg-white focus:ring-0 rounded-full py-2 pl-4 pr-12 text-sm transition-colors">
+                <button id="sendChatBtn" class="absolute right-1 w-8 h-8 flex items-center justify-center bg-purple-600 text-white rounded-full hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                    <i class="fas fa-paper-plane text-xs"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer Sederhana -->
+    <footer class="bg-gray-800 text-gray-300 py-6 mt-auto border-t border-gray-700">
+        <div class="container mx-auto px-4 text-center text-sm">
+            <p>&copy; 2026. Database SIHASAN. Bina Konstruksi Dinas PU Kota Bandar Lampung. Semua hak dilindungi.</p>
+        </div>
+    </footer>
+
+    <!-- JavaScript Logic -->
+    <script>
+        // State Management
+        const state = {
+            raw: [],
+            filtered: [],
+            currentPage: 1,
+            pageSize: 10,
+            searchQuery: '',
+            filterSatuan: '',
+            keysMap: {
+                no: '', uraian: '', merk: '', satuan: '', harga: '', keterangan: ''
+            }
+        };
+
+        // URL Google Spreadsheet CSV
+        const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTCHPFeNCakzi-Xby2H7f0P5Ke2bsPDgK46wdTuIuEfnx9ZVPTZ8NyjzSH7isb1ZgBbaPzv69o94mT5/pub?gid=0&single=true&output=csv';
+
+        // Format angka ke format Rupiah
+        function formatRupiah(amount) {
+            if (!amount) return '-';
+            // Bersihkan format numerik dari karakter non-digit kecuali koma/titik jika ada format sebelumnya
+            const cleanString = String(amount).replace(/[^0-9,-]/g, '');
+            if(!cleanString) return amount; // Kembalikan string asli jika tidak ada angka
+
+            const parsed = parseFloat(cleanString);
+            if (isNaN(parsed)) return amount;
+            
+            return new Intl.NumberFormat('id-ID', {
+                style: 'currency',
+                currency: 'IDR',
+                minimumFractionDigits: 0
+            }).format(parsed);
+        }
+
+        // Mapping kolom pintar (menangani kemungkinan perbedaan nama header CSV)
+        function mapKeys(headers) {
+            const findKey = (keywords) => headers.find(h => keywords.some(kw => h.toLowerCase().includes(kw)));
+            
+            state.keysMap.no = findKey(['no', 'nomor']) || headers[0];
+            state.keysMap.uraian = findKey(['uraian', 'nama', 'barang']) || headers[1];
+            state.keysMap.merk = findKey(['merk', 'merek']) || headers[2];
+            
+            // Khusus satuan, pastikan tidak mengandung kata 'harga'
+            state.keysMap.satuan = headers.find(h => h.toLowerCase().includes('satuan') && !h.toLowerCase().includes('harga')) || headers[3];
+            
+            state.keysMap.harga = findKey(['harga', 'nilai']) || headers[4];
+            state.keysMap.keterangan = findKey(['ket', 'keterangan']) || headers[5];
+        }
+
+        // Inisialisasi Aplikasi (Fetch & Parse Data)
+        function initApp() {
+            Papa.parse(CSV_URL, {
+                download: true,
+                header: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    // Sembunyikan loading
+                    document.getElementById('loadingIndicator').classList.add('hidden');
+                    
+                    if (results.data && results.data.length > 0) {
+                        const headers = Object.keys(results.data[0]);
+                        mapKeys(headers);
+                        
+                        // Bersihkan spasi berlebih atau baris rusak
+                        state.raw = results.data.map((row, index) => ({
+                            _originalIndex: index + 1,
+                            ...row
+                        }));
+                        
+                        populateFilterDropdown();
+                        applyFilters();
+                    } else {
+                        showEmptyState();
+                    }
+                },
+                error: function(err) {
+                    console.error("Gagal memuat data CSV", err);
+                    document.getElementById('loadingIndicator').innerHTML = `
+                        <i class="fas fa-exclamation-triangle text-red-500 text-4xl mb-3"></i>
+                        <p class="font-medium text-red-600 text-center">Gagal memuat data!<br>Pastikan link spreadsheet valid dan dapat diakses publik.</p>
+                    `;
+                }
+            });
+        }
+
+        // Mengisi dropdown satuan dengan nilai unik dari spreadsheet
+        function populateFilterDropdown() {
+            const selectElement = document.getElementById('satuanFilter');
+            const uniqueSatuan = new Set();
+            
+            state.raw.forEach(row => {
+                const val = row[state.keysMap.satuan];
+                if (val && val.trim() !== '') {
+                    uniqueSatuan.add(val.trim());
+                }
+            });
+
+            // Urutkan alfabetis
+            const sortedSatuan = Array.from(uniqueSatuan).sort();
+            
+            sortedSatuan.forEach(satuan => {
+                const option = document.createElement('option');
+                option.value = satuan;
+                option.textContent = satuan;
+                selectElement.appendChild(option);
+            });
+        }
+
+        // Mengaplikasikan Pencarian dan Filter Dropdown
+        function applyFilters() {
+            state.filtered = state.raw.filter(row => {
+                // 1. Logika Pencarian Cepat
+                const searchMatch = !state.searchQuery || Object.values(row).some(val => 
+                    String(val).toLowerCase().includes(state.searchQuery.toLowerCase())
+                );
+                
+                // 2. Logika Dropdown Filter Satuan
+                const satuanMatch = !state.filterSatuan || (
+                    row[state.keysMap.satuan] && 
+                    row[state.keysMap.satuan].trim() === state.filterSatuan
+                );
+
+                return searchMatch && satuanMatch;
+            });
+
+            // Reset ke halaman 1 setiap kali filter berubah
+            state.currentPage = 1; 
+            renderTable();
+        }
+
+        // Render Baris Tabel
+        function renderTable() {
+            const tbody = document.getElementById('tableBody');
+            const emptyState = document.getElementById('emptyState');
+            tbody.innerHTML = '';
+
+            const totalRecords = state.filtered.length;
+            
+            if (totalRecords === 0) {
+                emptyState.classList.remove('hidden');
+                emptyState.classList.add('flex');
+                updatePaginationInfo(0, 0, 0);
+                renderPaginationButtons(0);
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+            emptyState.classList.remove('flex');
+
+            let startIndex = 0;
+            let endIndex = totalRecords;
+
+            if (state.pageSize !== 'all') {
+                const limit = parseInt(state.pageSize);
+                startIndex = (state.currentPage - 1) * limit;
+                endIndex = Math.min(startIndex + limit, totalRecords);
+            }
+
+            const pageData = state.filtered.slice(startIndex, endIndex);
+
+            pageData.forEach((row, idx) => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-blue-50/50 transition-colors group";
+                
+                // Ambil nilai berdasarkan mapping (fallback ke string kosong)
+                const noText = row[state.keysMap.no] || (startIndex + idx + 1);
+                const uraianText = row[state.keysMap.uraian] || '-';
+                const merkText = row[state.keysMap.merk] || '-';
+                const satuanText = row[state.keysMap.satuan] || '-';
+                
+                let hargaText = row[state.keysMap.harga] || '-';
+                // Jika data belum mengandung 'Rp', format otomatis. Jika sudah, tampilkan apa adanya.
+                if (hargaText !== '-' && !hargaText.toString().toLowerCase().includes('rp')) {
+                    hargaText = formatRupiah(hargaText);
+                }
+                
+                const ketText = row[state.keysMap.keterangan] || '-';
+
+                tr.innerHTML = `
+                    <td class="py-3 px-4 text-center border-r border-gray-200 text-gray-500 font-medium">${noText}</td>
+                    <td class="py-3 px-4 border-r border-gray-200 font-medium text-gray-800">${uraianText}</td>
+                    <td class="py-3 px-4 border-r border-gray-200">${merkText}</td>
+                    <td class="py-3 px-4 text-center border-r border-gray-200">
+                        <span class="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-semibold group-hover:bg-white">${satuanText}</span>
+                    </td>
+                    <td class="py-3 px-4 border-r border-gray-200 text-right font-semibold text-blue-700">${hargaText}</td>
+                    <td class="py-3 px-4 text-gray-600 italic text-xs md:text-sm">${ketText}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            updatePaginationInfo(startIndex + 1, endIndex, totalRecords);
+            renderPaginationButtons(totalRecords);
+        }
+
+        function updatePaginationInfo(start, end, total) {
+            document.getElementById('infoStart').textContent = start;
+            document.getElementById('infoEnd').textContent = end;
+            document.getElementById('infoTotal').textContent = total;
+        }
+
+        function renderPaginationButtons(totalRecords) {
+            const paginationContainer = document.getElementById('pageNumbers');
+            paginationContainer.innerHTML = '';
+            
+            const btnPrev = document.getElementById('btnPrev');
+            const btnNext = document.getElementById('btnNext');
+
+            if (state.pageSize === 'all' || totalRecords === 0) {
+                btnPrev.disabled = true;
+                btnNext.disabled = true;
+                return;
+            }
+
+            const totalPages = Math.ceil(totalRecords / parseInt(state.pageSize));
+            
+            btnPrev.disabled = state.currentPage === 1;
+            btnNext.disabled = state.currentPage === totalPages;
+
+            // Logika Halaman Pintar (Membatasi jumlah tombol jika halamannya banyak)
+            let startPage = Math.max(1, state.currentPage - 2);
+            let endPage = Math.min(totalPages, startPage + 4);
+            
+            if (endPage - startPage < 4) {
+                startPage = Math.max(1, endPage - 4);
+            }
+
+            for (let i = startPage; i <= endPage; i++) {
+                const btn = document.createElement('button');
+                btn.textContent = i;
+                btn.className = `px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    i === state.currentPage 
+                    ? 'bg-blue-600 text-white shadow-sm' 
+                    : 'bg-white text-gray-600 hover:bg-blue-50 border border-gray-300'
+                }`;
+                btn.onclick = () => {
+                    state.currentPage = i;
+                    renderTable();
+                };
+                paginationContainer.appendChild(btn);
+            }
+        }
+
+        // Event Listeners
+        document.getElementById('pageSize').addEventListener('change', (e) => {
+            state.pageSize = e.target.value;
+            state.currentPage = 1;
+            renderTable();
+        });
+
+        document.getElementById('quickSearch').addEventListener('input', (e) => {
+            state.searchQuery = e.target.value;
+            applyFilters();
+        });
+
+        document.getElementById('satuanFilter').addEventListener('change', (e) => {
+            state.filterSatuan = e.target.value;
+            applyFilters();
+        });
+
+        document.getElementById('btnReset').addEventListener('click', () => {
+            // Reset state
+            state.searchQuery = '';
+            state.filterSatuan = '';
+            state.pageSize = 10;
+            
+            // Reset UI
+            document.getElementById('quickSearch').value = '';
+            document.getElementById('satuanFilter').value = '';
+            document.getElementById('pageSize').value = '10';
+            
+            applyFilters();
+        });
+
+        document.getElementById('btnPrev').addEventListener('click', () => {
+            if (state.currentPage > 1) {
+                state.currentPage--;
+                renderTable();
+            }
+        });
+
+        document.getElementById('btnNext').addEventListener('click', () => {
+            const totalPages = Math.ceil(state.filtered.length / parseInt(state.pageSize));
+            if (state.currentPage < totalPages) {
+                state.currentPage++;
+                renderTable();
+            }
+        });
+
+        // Jalankan Aplikasi saat DOM telah dimuat
+        document.addEventListener('DOMContentLoaded', initApp);
+
+        // --- State untuk Chat AI ---
+        const chatState = {
+            isOpen: false,
+            isProcessing: false,
+            history: []
+        };
+
+        // UI Elements
+        const aiChatBtn = document.getElementById('aiChatBtn');
+        const aiChatModal = document.getElementById('aiChatModal');
+        const closeChatBtn = document.getElementById('closeChatBtn');
+        const chatInput = document.getElementById('chatInput');
+        const sendChatBtn = document.getElementById('sendChatBtn');
+        const chatMessages = document.getElementById('chatMessages');
+
+        // Toggle Chat Modal
+        function toggleChat() {
+            chatState.isOpen = !chatState.isOpen;
+            if (chatState.isOpen) {
+                aiChatModal.classList.remove('hidden');
+                // Sedikit delay agar animasi transisi terlihat
+                setTimeout(() => {
+                    aiChatModal.classList.remove('scale-0', 'opacity-0');
+                    aiChatModal.classList.add('scale-100', 'opacity-100');
+                    chatInput.focus();
+                }, 10);
+            } else {
+                aiChatModal.classList.remove('scale-100', 'opacity-100');
+                aiChatModal.classList.add('scale-0', 'opacity-0');
+                setTimeout(() => {
+                    aiChatModal.classList.add('hidden');
+                }, 300); // Sesuaikan dengan durasi transisi Tailwind
+            }
+        }
+
+        aiChatBtn.addEventListener('click', toggleChat);
+        closeChatBtn.addEventListener('click', toggleChat);
+
+        // Render Pesan ke UI
+        function appendMessage(text, sender) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `flex gap-2 items-end ${sender === 'user' ? 'justify-end' : ''}`;
+            
+            const bubbleDiv = document.createElement('div');
+            
+            // Konversi markdown sederhana (*tebal* dan newline)
+            const formattedText = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                                      .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                                      .replace(/\n/g, '<br>');
+
+            if (sender === 'user') {
+                bubbleDiv.className = 'bg-purple-600 text-white p-3 rounded-2xl rounded-br-none max-w-[85%] text-sm shadow-sm';
+            } else {
+                bubbleDiv.className = 'bg-blue-100 text-blue-900 p-3 rounded-2xl rounded-bl-none max-w-[85%] text-sm shadow-sm border border-blue-200';
+            }
+            
+            bubbleDiv.innerHTML = formattedText;
+            msgDiv.appendChild(bubbleDiv);
+            chatMessages.appendChild(msgDiv);
+            
+            // Scroll ke bawah
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // Tampilkan indikator loading
+        function showTypingIndicator() {
+            const msgDiv = document.createElement('div');
+            msgDiv.id = 'typingIndicator';
+            msgDiv.className = 'flex gap-2 items-end';
+            msgDiv.innerHTML = `
+                <div class="bg-gray-200 text-gray-500 p-3 rounded-2xl rounded-bl-none text-sm flex gap-1">
+                    <span class="animate-bounce">•</span>
+                    <span class="animate-bounce" style="animation-delay: 0.2s">•</span>
+                    <span class="animate-bounce" style="animation-delay: 0.4s">•</span>
+                </div>
+            `;
+            chatMessages.appendChild(msgDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function removeTypingIndicator() {
+            const indicator = document.getElementById('typingIndicator');
+            if (indicator) indicator.remove();
+        }
+
+        // Interaksi dengan Gemini API
+        async function sendMessage() {
+            const text = chatInput.value.trim();
+            if (!text || chatState.isProcessing) return;
+
+            // Update UI User
+            appendMessage(text, 'user');
+            chatInput.value = '';
+            chatState.isProcessing = true;
+            sendChatBtn.disabled = true;
+            showTypingIndicator();
+
+            // Siapkan Konteks Data (Ambil max 150 data yang sedang difilter untuk menghindari payload terlalu besar)
+            const contextData = state.filtered.slice(0, 150).map(row => {
+                return `Uraian: ${row[state.keysMap.uraian]}, Merk: ${row[state.keysMap.merk]}, Satuan: ${row[state.keysMap.satuan]}, Harga: ${row[state.keysMap.harga]}`;
+            }).join(' | ');
+
+            const systemPrompt = `Anda adalah Asisten AI SIHASAN (Sistem Informasi Harga Satuan) untuk Dinas PU Kota Bandar Lampung. 
+Tugas Anda adalah menjawab pertanyaan pengguna berdasarkan data harga material berikut.
+Jawablah dengan ringkas, ramah, profesional, dan dalam bahasa Indonesia.
+Jika ditanya harga, tampilkan format rupiah yang rapi. 
+Data Konteks (Sebagian/Seluruh data saat ini): ${contextData}`;
+
+            const payload = {
+                contents: [{ parts: [{ text: text }] }],
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+                // Model yang disyaratkan
+            };
+
+            const apiKey = ""; // API Key dikelola otomatis oleh environment Canvas
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+                removeTypingIndicator();
+
+                if (result.candidates && result.candidates[0] && result.candidates[0].content) {
+                    const aiResponseText = result.candidates[0].content.parts[0].text;
+                    appendMessage(aiResponseText, 'bot');
+                } else {
+                    appendMessage("Maaf, saya tidak dapat memproses permintaan Anda saat ini.", 'bot');
+                }
+            } catch (error) {
+                console.error("Gemini API Error:", error);
+                removeTypingIndicator();
+                appendMessage("Terjadi kesalahan jaringan atau sistem. Coba beberapa saat lagi.", 'bot');
+            } finally {
+                chatState.isProcessing = false;
+                sendChatBtn.disabled = false;
+                chatInput.focus();
+            }
+        }
+
+        // Event Listeners untuk Chat
+        sendChatBtn.addEventListener('click', sendMessage);
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+    </script>
+</body>
+</html>
